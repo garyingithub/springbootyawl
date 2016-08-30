@@ -20,6 +20,7 @@ package org.yawlfoundation.yawl.engine.interfce.interfaceB;
 
 import edu.sysu.yawl.Property;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 import org.yawlfoundation.yawl.elements.data.external.ExternalDBGatewayFactory;
 import org.yawlfoundation.yawl.elements.predicate.PredicateEvaluatorFactory;
@@ -29,6 +30,7 @@ import org.yawlfoundation.yawl.engine.interfce.EngineGateway;
 import org.yawlfoundation.yawl.engine.interfce.EngineGatewayImpl;
 import org.yawlfoundation.yawl.engine.interfce.ServletUtils;
 import org.yawlfoundation.yawl.engine.interfce.YHttpServlet;
+import org.yawlfoundation.yawl.engine.time.YTimer;
 import org.yawlfoundation.yawl.exceptions.YAWLException;
 import org.yawlfoundation.yawl.exceptions.YPersistenceException;
 import org.yawlfoundation.yawl.util.StringUtil;
@@ -63,9 +65,10 @@ import java.util.concurrent.*;
  *
  */
 @Component
+@Scope("prototype")
 public class InterfaceB_EngineBasedServer extends YHttpServlet {
 
-    private EngineGateway _engine;
+    public static EngineGateway _engine;
 
     public static String engineId;
     public static String influxAddress;
@@ -84,34 +87,42 @@ public class InterfaceB_EngineBasedServer extends YHttpServlet {
             influxAddress=property.getInflux_address();
 
             // init engine reference
-            _engine = (EngineGateway) context.getAttribute("engine");
-            if (_engine == null) {
+           
+            if (InterfaceB_EngineBasedServer._engine == null) {
                 String persistOn = context.getInitParameter("EnablePersistence");
                 boolean persist = (persistOn != null) && persistOn.equalsIgnoreCase("true");
                 String enableHbnStatsStr =
                         context.getInitParameter("EnableHibernateStatisticsGathering");
                 boolean enableHbnStats = ((enableHbnStatsStr != null) &&
                         enableHbnStatsStr.equalsIgnoreCase("true"));
-                _engine = new EngineGatewayImpl(persist, enableHbnStats);
-                _engine.setActualFilePath(context.getRealPath("/"));
-                context.setAttribute("engine", _engine);
+                InterfaceB_EngineBasedServer._engine = new EngineGatewayImpl(persist, enableHbnStats);
+                InterfaceB_EngineBasedServer._engine.setActualFilePath(context.getRealPath("/"));
+                context.setAttribute("engine", InterfaceB_EngineBasedServer._engine);
+                // set flag to disable logging (only if false) - enabled with persistence by
+                // default
+                String logStr = context.getInitParameter("EnableLogging");
+                if ((logStr != null) && logStr.equalsIgnoreCase("false")) {
+                    InterfaceB_EngineBasedServer._engine.disableLogging();
+                }
+
+                // add the reference to the default worklist
+                InterfaceB_EngineBasedServer._engine.setDefaultWorklist(property.getMaster_address());
+
+                // set flag for generic admin account (only if set to true)
+                String allowAdminID = context.getInitParameter("AllowGenericAdminID");
+                if ((allowAdminID != null) && allowAdminID.equalsIgnoreCase("true")) {
+                    InterfaceB_EngineBasedServer._engine.setAllowAdminID(true);
+                    
+                }
+
+                // read the current version properties
+                InterfaceB_EngineBasedServer._engine.initBuildProperties(context.getResourceAsStream(
+                        "/WEB-INF/classes/version.properties"));
+                
             }
 
-            // set flag to disable logging (only if false) - enabled with persistence by
-            // default
-            String logStr = context.getInitParameter("EnableLogging");
-            if ((logStr != null) && logStr.equalsIgnoreCase("false")) {
-                _engine.disableLogging();
-            }
-
-            // add the reference to the default worklist
-            _engine.setDefaultWorklist(property.getMaster_address());
-
-            // set flag for generic admin account (only if set to true)
-            String allowAdminID = context.getInitParameter("AllowGenericAdminID");
-            if ((allowAdminID != null) && allowAdminID.equalsIgnoreCase("true")) {
-                _engine.setAllowAdminID(true);
-            }
+            
+            
 
             // set the path to external db gateway plugin classes (if any)
             String pluginPath = context.getInitParameter("ExternalPluginsPath");
@@ -124,9 +135,7 @@ public class InterfaceB_EngineBasedServer extends YHttpServlet {
                     context.getInitParameter("InitialisationAnnouncementTimeout"), -1);
             if (maxWait >= 0) maxWaitSeconds = maxWait;
 
-            // read the current version properties
-            _engine.initBuildProperties(context.getResourceAsStream(
-                    "/WEB-INF/classes/version.properties"));
+            
 
             // init any 3rd party observer gateways
             String gatewayStr = context.getInitParameter("ObserverGateway");
@@ -143,8 +152,8 @@ public class InterfaceB_EngineBasedServer extends YHttpServlet {
             throw new UnavailableException("Persistence failure");
         }
 
-        if (_engine != null) {
-            _engine.notifyServletInitialisationComplete(maxWaitSeconds);
+        if (InterfaceB_EngineBasedServer._engine != null) {
+            InterfaceB_EngineBasedServer._engine.notifyServletInitialisationComplete(maxWaitSeconds);
         }
         else {
             _log.fatal("Failed to initialise Engine (unspecified failure). Please " +
@@ -174,7 +183,7 @@ public class InterfaceB_EngineBasedServer extends YHttpServlet {
             }
 
             if (gateway != null)
-                _engine.registerObserverGateway(gateway);
+                InterfaceB_EngineBasedServer._engine.registerObserverGateway(gateway);
             else
                 _log.warn("Error registering external ObserverGateway '{}'.",
                         gatewayClassName);
@@ -199,11 +208,14 @@ public class InterfaceB_EngineBasedServer extends YHttpServlet {
     }
 
     public void destroy() {
-        _engine.shutdown();
+        InterfaceB_EngineBasedServer._engine.shutdown();
         super.destroy();
     }
 
 
+    public EngineGateway getEngine(){
+        return InterfaceB_EngineBasedServer._engine;
+    }
     public void doGet(HttpServletRequest request, HttpServletResponse response) throws IOException {
         doPost(request, response);                 // redirect all GETs to POSTs
     }
@@ -214,10 +226,24 @@ public class InterfaceB_EngineBasedServer extends YHttpServlet {
         OutputStreamWriter outputWriter = ServletUtils.prepareResponse(response);
         StringBuilder output = new StringBuilder();
         output.append("<response>");
-        output.append(processPostQuery(request));
+
+        Task task=new Task(request);
+        Dispatcher.addTask(task);
+
+
+        synchronized (task){
+            try {
+                while (task.getResult()==null){
+                    task.wait();
+                }
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+        output.append(task.getResult());
 
         output.append("</response>");
-        if (_engine.enginePersistenceFailure())
+        if (InterfaceB_EngineBasedServer._engine.enginePersistenceFailure())
         {
             _log.fatal("************************************************************");
             _log.fatal("A failure has occurred whilst persisting workflow state to the");
@@ -238,235 +264,14 @@ public class InterfaceB_EngineBasedServer extends YHttpServlet {
     //      Start YAWL Processing methods
     //###############################################################################
 
-    private String processPostQuery(HttpServletRequest request) {
-        StringBuilder msg = new StringBuilder();
-        String sessionHandle = request.getParameter("sessionHandle");
-        String action = request.getParameter("action");
-        String workItemID = request.getParameter("workItemID");
-        String specIdentifier = request.getParameter("specidentifier");
-        String specVersion = request.getParameter("specversion");
-        String specURI = request.getParameter("specuri");
-        String taskID = request.getParameter("taskID");
 
-        try {
-            debug(request, "Post");
-
-            if (action != null) {
-                if (action.equals("checkConnection")) {
-                    msg.append(_engine.checkConnection(sessionHandle));
-                }
-                else if (action.equals("connect")) {
-                    String userID = request.getParameter("userid");
-                    String password = request.getParameter("password");
-                    int interval = request.getSession().getMaxInactiveInterval();
-                    msg.append(_engine.connect(userID, password, interval));
-                }
-                else if ("disconnect".equals(action)) {
-                    msg.append(_engine.disconnect(sessionHandle));
-                }
-                else if (action.equals("checkout")) {
-                    msg.append(_engine.startWorkItem(workItemID, sessionHandle));
-                }
-                else if (action.equals("checkin")) {
-                    String data = request.getParameter("data");
-                    String logPredicate = request.getParameter("logPredicate");
-                    msg.append(_engine.completeWorkItem(workItemID, data, logPredicate, false,
-                            sessionHandle));
-                }
-                else if (action.equals("rejectAnnouncedEnabledTask")) {
-                    msg.append(_engine.rejectAnnouncedEnabledTask(workItemID, sessionHandle));
-                }
-                else if (action.equals("launchCase")) {
-                    YSpecificationID specID =
-                            new YSpecificationID(specIdentifier, specVersion, specURI);
-                    URI completionObserver = getCompletionObserver(request);
-                    String caseParams = request.getParameter("caseParams");
-                    String logDataStr = request.getParameter("logData");
-                    String mSecStr = request.getParameter("mSec");
-                    String startStr = request.getParameter("start");
-                    String waitStr = request.getParameter("wait");
-                    String caseID=request.getParameter("caseID");
-                    String tenantID=request.getParameter("tenantID");
-                    if (mSecStr != null) {
-                        msg.append(_engine.launchCase(specID, caseParams,
-                                   completionObserver, caseID,tenantID,logDataStr,
-                                   StringUtil.strToLong(mSecStr, 0), sessionHandle));
-                    }
-                    else if (startStr != null) {
-                        long time = StringUtil.strToLong(startStr, 0);
-                        Date date = time > 0 ? new Date(time) : new Date();
-                        msg.append(_engine.launchCase(specID, caseParams,
-                                   completionObserver,caseID,tenantID,logDataStr, date, sessionHandle));
-                    }
-                    else if (waitStr != null) {
-                        msg.append(_engine.launchCase(specID, caseParams,
-                                   completionObserver, caseID,tenantID,logDataStr,
-                                   StringUtil.strToDuration(waitStr), sessionHandle));
-                    }
-                    else msg.append(_engine.launchCase(specID, caseParams,
-                                    completionObserver, caseID,tenantID,logDataStr, sessionHandle));
-                }
-                else if (action.equals("cancelCase")) {
-                    String caseID = request.getParameter("caseID");
-                    msg.append(_engine.cancelCase(caseID, sessionHandle));
-                }
-                else if (action.equals("getWorkItem")) {
-                    msg.append(_engine.getWorkItem(workItemID, sessionHandle));
-                }
-                else if (action.equals("startOne")) {
-                    String userID = request.getParameter("user");
-                    msg.append(_engine.startWorkItem(userID, sessionHandle));
-                }
-                else if (action.equals("getLiveItems")) {
-                    msg.append(_engine.describeAllWorkItems(sessionHandle));
-                }
-                else if (action.equals("getAllRunningCases")) {
-                    msg.append(_engine.getAllRunningCases(sessionHandle));
-                }
-                else if (action.equals("getWorkItemsWithIdentifier")) {
-                    String idType = request.getParameter("idType");
-                    String id = request.getParameter("id");
-                    msg.append(_engine.getWorkItemsWithIdentifier(idType, id, sessionHandle));
-                }
-                else if (action.equals("getWorkItemsForService")) {
-                    String serviceURI = request.getParameter("serviceuri");
-                    msg.append(_engine.getWorkItemsForService(serviceURI, sessionHandle));
-                }
-                else if (action.equals("taskInformation")) {
-                    YSpecificationID specID =
-                            new YSpecificationID(specIdentifier, specVersion, specURI);
-                    msg.append(_engine.getTaskInformation(specID, taskID, sessionHandle));
-                }
-                else if (action.equals("getMITaskAttributes")) {
-                    YSpecificationID specID =
-                            new YSpecificationID(specIdentifier, specVersion, specURI);
-                    msg.append(_engine.getMITaskAttributes(specID, taskID, sessionHandle));
-                }
-                else if (action.equals("getResourcingSpecs")) {
-                    YSpecificationID specID =
-                            new YSpecificationID(specIdentifier, specVersion, specURI);
-                    msg.append(_engine.getResourcingSpecs(specID, taskID, sessionHandle));
-                }
-                else if (action.equals("checkIsAdmin")) {
-                    msg.append(_engine.checkConnectionForAdmin(sessionHandle));
-                }
-                else if (action.equals("checkAddInstanceEligible")) {
-                    msg.append(_engine.checkElegibilityToAddInstances(
-                                                              workItemID, sessionHandle));
-                }
-                else if (action.equals("getSpecificationPrototypesList")) {
-                    msg.append(_engine.getSpecificationList(sessionHandle));
-                }
-                else if (action.equals("getSpecification")) {
-                    YSpecificationID specID =
-                            new YSpecificationID(specIdentifier, specVersion, specURI);
-                    msg.append(_engine.getProcessDefinition(specID, sessionHandle));
-                }
-                else if (action.equals("getSpecificationData")) {
-                    YSpecificationID specID =
-                            new YSpecificationID(specIdentifier, specVersion, specURI);
-                    msg.append(_engine.getSpecificationData(specID, sessionHandle));
-                }
-                else if (action.equals("getSpecificationDataSchema")) {
-                    YSpecificationID specID =
-                            new YSpecificationID(specIdentifier, specVersion, specURI);
-                    msg.append(_engine.getSpecificationDataSchema(specID, sessionHandle));
-                }
-                else if (action.equals("getCasesForSpecification")) {
-                    YSpecificationID specID =
-                            new YSpecificationID(specIdentifier, specVersion, specURI);
-                    msg.append(_engine.getCasesForSpecification(specID, sessionHandle));
-                }
-                else if (action.equals("getSpecificationForCase")) {
-                    String caseID = request.getParameter("caseID");
-                    msg.append(_engine.getSpecificationForCase(caseID, sessionHandle));
-                }
-                else if (action.equals("getSpecificationIDForCase")) {
-                    String caseID = request.getParameter("caseID");
-                    msg.append(_engine.getSpecificationIDForCase(caseID, sessionHandle));
-                }
-                else if (action.equals("getCaseState")) {
-                    String caseID = request.getParameter("caseID");
-                    msg.append(_engine.getCaseState(caseID, sessionHandle));
-                }
-                else if (action.equals("getCaseData")) {
-                    String caseID = request.getParameter("caseID");
-                    msg.append(_engine.getCaseData(caseID, sessionHandle));
-                }
-                else if (action.equals("getChildren")) {
-                    msg.append(_engine.getChildrenOfWorkItem(workItemID, sessionHandle));
-                }
-                else if (action.equals("getWorkItemExpiryTime")) {
-                    msg.append(_engine.getWorkItemExpiryTime(workItemID, sessionHandle));
-                }
-                else if (action.equals("getCaseInstanceSummary")) {
-                    msg.append(_engine.getCaseInstanceSummary(sessionHandle));
-                }
-                else if (action.equals("getWorkItemInstanceSummary")) {
-                    String caseID = request.getParameter("caseID");
-                    msg.append(_engine.getWorkItemInstanceSummary(caseID, sessionHandle));
-                }
-                else if (action.equals("getParameterInstanceSummary")) {
-                    String caseID = request.getParameter("caseID");
-                    msg.append(_engine.getParameterInstanceSummary(caseID, workItemID, sessionHandle));
-                }
-                else if (action.equals("createInstance")) {
-                    String paramValueForMICreation =
-                            request.getParameter("paramValueForMICreation");
-                    msg.append(_engine.createNewInstance(workItemID,
-                            paramValueForMICreation, sessionHandle));
-                }
-                else if (action.equals("suspend")) {
-                    msg.append(_engine.suspendWorkItem(workItemID, sessionHandle));
-                }
-                else if (action.equals("rollback")) {
-                    msg.append(_engine.rollbackWorkItem(workItemID, sessionHandle));
-                }
-                else if (action.equals("unsuspend")) {
-                    msg.append(_engine.unsuspendWorkItem(workItemID, sessionHandle));
-                }
-                else if (action.equals("skip")) {
-                    msg.append(_engine.skipWorkItem(workItemID, sessionHandle));
-                }
-                else if (action.equals("getStartingDataSnapshot")) {
-                    msg.append(_engine.getStartingDataSnapshot(workItemID, sessionHandle));
-                }
-            }  // action is null
-            else if (request.getRequestURI().endsWith("ib")) {
-                msg.append(_engine.getAvailableWorkItemIDs(sessionHandle));
-            }
-            else if (request.getRequestURI().contains("workItem")) {
-                msg.append(_engine.getWorkItemOptions(workItemID,
-                        request.getRequestURL().toString(), sessionHandle));
-            }
-            else _log.error("Interface B called with null action.");
-        }
-        catch (RemoteException e) {
-            _log.error("Remote Exception in Interface B with action: " + action, e);
-        }
-        _log.debug("InterfaceB_EngineBasedServer::doPost() result = {}", msg);
-        return msg.toString();
-    }
-
-
-    private URI getCompletionObserver(HttpServletRequest request) {
-        String completionObserver = request.getParameter("completionObserverURI");
-        if(completionObserver != null) {
-            try {
-                return new URI(completionObserver);
-            } catch (URISyntaxException e) {
-                _log.error("Failure to ", e);
-            }
-        }
-        return null;
-    }                                         
 
 
     private void debug(HttpServletRequest request, String service) {
         if (_log.isDebugEnabled()) {
-            _log.debug("\nInterfaceB_EngineBasedServer::do{}() request.getRequestURL={}",
+            _log.debug("\nInterfaceBInterfaceB_EngineBasedServer._engineBasedServer::do{}() request.getRequestURL={}",
                     service, request.getRequestURL());
-            _log.debug("\nInterfaceB_EngineBasedServer::do{}() request.parameters:", service);
+            _log.debug("\nInterfaceBInterfaceB_EngineBasedServer._engineBasedServer::do{}() request.parameters:", service);
             Enumeration paramNms = request.getParameterNames();
             while (paramNms.hasMoreElements()) {
                 String name = (String) paramNms.nextElement();
@@ -477,51 +282,6 @@ public class InterfaceB_EngineBasedServer extends YHttpServlet {
 
     }
 
-    public class CallableDemo implements Callable<String>{
-
-        private HttpServletRequest request;
-        public CallableDemo(HttpServletRequest request){
-            this.request=request;
-        }
-        @Override
-        public String call() throws Exception {
-            return processPostQuery(request);
-        }
-    }
 
 
-
-    public static void main(String args[]){
-        List<Thread> list=new ArrayList<>();
-        Thread thread=new Thread(new Runnable() {
-            @Override
-            public void run() {
-                for(int i=0;i<50;i++){
-                    if(i>30){
-                        try {
-                            list.add(Thread.currentThread());
-                            Thread.currentThread().wait();
-                        } catch (InterruptedException e) {
-                            e.printStackTrace();
-                        }
-                    }
-                    System.out.println(i);
-                }
-            }
-        });
-
-        Thread thread1=new Thread(new Runnable() {
-            @Override
-            public void run() {
-                if(list.size()>0){
-                    Thread t=list.get(0);
-                    System.out.println("release the thread");
-                    t.notify();
-                }
-            }
-        });
-
-        thread.start();
-        thread1.start();
-    }
 }

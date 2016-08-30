@@ -21,6 +21,8 @@ package org.yawlfoundation.yawl.engine;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jdom2.Document;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 import org.yawlfoundation.yawl.authentication.YSession;
 import org.yawlfoundation.yawl.elements.YAWLServiceGateway;
 import org.yawlfoundation.yawl.elements.YAWLServiceReference;
@@ -47,6 +49,7 @@ import static org.yawlfoundation.yawl.engine.announcement.YEngineEvent.*;
  * @author Michael Adams
  * @date 10/04/2010
  */
+@Component
 public class YAnnouncer {
 
     private final ObserverGatewayController _controller;
@@ -68,7 +71,7 @@ public class YAnnouncer {
         // Currently the only standard gateway is the HTTP driven IB Servlet client.
         try {
             _controller.addGateway(new InterfaceB_EngineBasedClient());
-            _controller.addGateway(new InterfaceC_EngineBasedClient());
+            //_controller.addGateway(new InterfaceC_EngineBasedClient());
         }
         catch (YAWLException ye) {
             _logger.warn("Failed to register default observer gateway. The Engine " +

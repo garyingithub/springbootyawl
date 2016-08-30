@@ -18,11 +18,14 @@
 
 package org.yawlfoundation.yawl.engine.interfce.interfaceB;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+
 import org.jdom2.Document;
 import org.jdom2.Element;
 import org.jdom2.JDOMException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 import org.yawlfoundation.yawl.elements.YAWLServiceReference;
 import org.yawlfoundation.yawl.elements.YTask;
 import org.yawlfoundation.yawl.elements.data.YParameter;
@@ -30,6 +33,9 @@ import org.yawlfoundation.yawl.elements.state.YIdentifier;
 import org.yawlfoundation.yawl.engine.*;
 import org.yawlfoundation.yawl.engine.announcement.YAnnouncement;
 import org.yawlfoundation.yawl.engine.announcement.YEngineEvent;
+import org.yawlfoundation.yawl.engine.interfce.InterfaceC.AddTenantRequestThread;
+import org.yawlfoundation.yawl.engine.interfce.InterfaceC.ExecuteThread;
+import org.yawlfoundation.yawl.engine.interfce.InterfaceC.InterfaceC_EngineBasedClient;
 import org.yawlfoundation.yawl.engine.interfce.Interface_Client;
 import org.yawlfoundation.yawl.unmarshal.YDecompositionParser;
 import org.yawlfoundation.yawl.util.HttpURLValidator;
@@ -38,8 +44,8 @@ import org.yawlfoundation.yawl.util.JDOMUtil;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.util.*;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.yawlfoundation.yawl.engine.announcement.YEngineEvent.*;
 
@@ -53,16 +59,26 @@ import static org.yawlfoundation.yawl.engine.announcement.YEngineEvent.*;
  *
  * @author Michael Adams (refactored for v2.0, 06/2008 - 12/2008)
  */
-
+@Component
 public class InterfaceB_EngineBasedClient extends Engine_Client implements ObserverGateway {
 
-    protected static final Logger _logger = LogManager.getLogger(InterfaceB_EngineBasedClient.class);
-    private static final ExecutorService _executor =
-            Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+    @Autowired
+    private AddTenantRequestThread addTenantRequestThread=new AddTenantRequestThread();
 
+
+
+    protected static final Logger _logger = LoggerFactory.getLogger(InterfaceB_EngineBasedClient.class);
+
+    private final InterfaceC_EngineBasedClient client=new InterfaceC_EngineBasedClient();
+
+    @Autowired
+    private ExecuteThread executeThread=ExecuteThread.getExecuteThread();
     public InterfaceB_EngineBasedClient(){
 
+        executeThread.start();
+        addTenantRequestThread.start();
     }
+
 
     /**
      * Indicates which protocol this shim services.
@@ -78,9 +94,11 @@ public class InterfaceB_EngineBasedClient extends Engine_Client implements Obser
      * @param announcement
      */
     public void announceFiredWorkItem(YAnnouncement announcement) {
-        _executor.execute(new Handler(announcement.getYawlService(),
-                announcement.getItem(), ITEM_ADD));
+        //_executor.execute(new Handler(announcement.getYawlService(),
+          //      announcement.getItem(), ITEM_ADD));
 
+        this.addHandle(new Handler(announcement.getYawlService(),
+                      announcement.getItem(), ITEM_ADD));
 
 
 
@@ -111,7 +129,8 @@ public class InterfaceB_EngineBasedClient extends Engine_Client implements Obser
      * @param workItem the work item to cancel.
      */
     public void cancelWorkItem(YAWLServiceReference yawlService, YWorkItem workItem) {
-        _executor.execute(new Handler(yawlService, workItem, ITEM_CANCEL));
+       // _executor.execute(new Handler(yawlService, workItem, ITEM_CANCEL));
+        addHandle(new Handler(yawlService, workItem, ITEM_CANCEL));
     }
 
 
@@ -122,7 +141,8 @@ public class InterfaceB_EngineBasedClient extends Engine_Client implements Obser
     public void announceTimerExpiry(YAnnouncement announcement) {
         YAWLServiceReference yawlService = announcement.getYawlService();
         YWorkItem workItem = announcement.getItem();
-        _executor.execute(new Handler(yawlService, workItem, TIMER_EXPIRED));
+       // _executor.execute(new Handler(yawlService, workItem, TIMER_EXPIRED));
+        addHandle(new Handler(yawlService, workItem, TIMER_EXPIRED));
     }
 
 
@@ -138,7 +158,8 @@ public class InterfaceB_EngineBasedClient extends Engine_Client implements Obser
         //for (YAWLServiceReference service : services) {
        //     _executor.execute(new Handler(service, caseID, CASE_SUSPENDED));
         //}
-        _executor.execute(new Handler(getReference(), caseID, CASE_SUSPENDED));
+       // _executor.execute(new Handler(getReference(), caseID, CASE_SUSPENDED));
+        addHandle(new Handler(getReference(), caseID, CASE_SUSPENDED));
     }
 
     /**
@@ -149,7 +170,8 @@ public class InterfaceB_EngineBasedClient extends Engine_Client implements Obser
         //for (YAWLServiceReference service : services) {
           //  _executor.execute(new Handler(service, caseID, CASE_SUSPENDING));
        // }
-        _executor.execute(new Handler(getReference(), caseID, CASE_SUSPENDING));
+       // _executor.execute(new Handler(getReference(), caseID, CASE_SUSPENDING));
+        addHandle(new Handler(getReference(), caseID, CASE_SUSPENDING));
     }
 
     /**
@@ -161,7 +183,8 @@ public class InterfaceB_EngineBasedClient extends Engine_Client implements Obser
       //      _executor.execute(new Handler(service, caseID, CASE_RESUMED));
 
      //   }
-        _executor.execute(new Handler(getReference(), caseID, CASE_RESUMED));
+      //  _executor.execute(new Handler(getReference(), caseID, CASE_RESUMED));
+        addHandle(new Handler(getReference(), caseID, CASE_RESUMED));
     }
 
     /**
@@ -182,6 +205,8 @@ public class InterfaceB_EngineBasedClient extends Engine_Client implements Obser
         // _executor.execute(new Handler(getReference(), workItem, oldStatus.toString(),
                                             //        newStatus.toString(), ITEM_STATUS));
 
+        this.addHandle(new Handler(getReference(), workItem, oldStatus.toString(),
+                        newStatus.toString(), ITEM_STATUS));
 
 
     }
@@ -203,9 +228,10 @@ public class InterfaceB_EngineBasedClient extends Engine_Client implements Obser
      //       _executor.execute(
       //              new Handler(service, specID, caseID, launchingService, delayed, CASE_START));
        // }
-        _executor.execute(
-                              new Handler(getReference(), specID, caseID, launchingService, delayed, CASE_START));
+       // _executor.execute(
+         //                     new Handler(getReference(), specID, caseID, launchingService, delayed, CASE_START));
 
+        addHandle( new Handler(getReference(), specID, caseID, launchingService, delayed, CASE_START));
     }
 
     /**
@@ -229,8 +255,9 @@ public class InterfaceB_EngineBasedClient extends Engine_Client implements Obser
      */
     public void announceCaseCompletion(YAWLServiceReference yawlService,
                                        YIdentifier caseID, Document caseData) {
-        _executor.execute(new Handler(yawlService, caseID, caseData, CASE_COMPLETE));
+       // _executor.execute(new Handler(yawlService, caseID, caseData, CASE_COMPLETE));
 
+        addHandle(new Handler(yawlService, caseID, caseData, CASE_COMPLETE));
     }
 
     /**
@@ -242,7 +269,9 @@ public class InterfaceB_EngineBasedClient extends Engine_Client implements Obser
         //for (YAWLServiceReference service : services) {
           //  _executor.execute(new Handler(service, maxWaitSeconds, ENGINE_INIT));
         //}
-        _executor.execute(new Handler(getReference(), maxWaitSeconds, ENGINE_INIT));
+       // _executor.execute(new Handler(getReference(), maxWaitSeconds, ENGINE_INIT));
+
+//        addHandle(new Handler(getReference(), maxWaitSeconds, ENGINE_INIT));
     }
 
     /**
@@ -255,7 +284,8 @@ public class InterfaceB_EngineBasedClient extends Engine_Client implements Obser
        // for (YAWLServiceReference service : services) {
        //     _executor.execute(new Handler(service, id, CASE_CANCELLED));
       //  }
-        _executor.execute(new Handler(getReference(), id, CASE_CANCELLED));
+      //  _executor.execute(new Handler(getReference(), id, CASE_CANCELLED));
+        addHandle(new Handler(getReference(), id, CASE_CANCELLED));
     }
 
     /**
@@ -269,7 +299,7 @@ public class InterfaceB_EngineBasedClient extends Engine_Client implements Obser
         //for (YAWLServiceReference service : services) {
         //    _executor.execute(new Handler(service, id, tasks, CASE_DEADLOCKED));
         //}
-        _executor.execute(new Handler(getReference(), id, tasks, CASE_DEADLOCKED));
+       // _executor.execute(new Handler(getReference(), id, tasks, CASE_DEADLOCKED));
     }
 
 
@@ -279,7 +309,7 @@ public class InterfaceB_EngineBasedClient extends Engine_Client implements Obser
      */
     public void shutdown() {
         HttpURLValidator.cancelAll();
-        _executor.shutdownNow();
+
 
     	// Nothing else to do - Interface B Clients handle shutdown within their own servlet.
     }
@@ -321,7 +351,11 @@ public class InterfaceB_EngineBasedClient extends Engine_Client implements Obser
      * parameter values as HTTP POST messages to external custom services
      */
 
-    private class Handler implements Runnable {
+    public  void addHandle(Handler handler){
+        addTenantRequestThread.addTenantHandler(handler);
+    }
+
+    public class Handler implements Runnable,Comparable {
         private YWorkItem _workItem;
         private YAWLServiceReference _yawlService;
         private YEngineEvent _command;
@@ -334,6 +368,13 @@ public class InterfaceB_EngineBasedClient extends Engine_Client implements Obser
         private String _newStatus;
         private boolean _delayed;
         private int _pingTimeout = 5;
+
+
+
+
+        public String getEvent(){
+            return this._command.name();
+        }
 
         public Handler(YAWLServiceReference yawlService, YWorkItem workItem, YEngineEvent command) {
             _workItem = workItem;
@@ -393,6 +434,7 @@ public class InterfaceB_EngineBasedClient extends Engine_Client implements Obser
          * Load parameter map as required, then POST the message to the custom service
          */
         public void run() {
+
             Map<String, String> paramsMap = prepareParamMap(_command.label(), null);
             if (_workItem != null) paramsMap.put("workItem", _workItem.toXML());
             if (_caseID != null) paramsMap.put("caseID", _caseID.toString());
@@ -452,7 +494,13 @@ public class InterfaceB_EngineBasedClient extends Engine_Client implements Obser
                 else if (! _command.isBroadcast()) {
                     _logger.warn("Failed to call YAWL service", e);
                 }
-            }            
+            }
+
+
+            client.addCounting(getCaseId(),getTenantId().toString());
+            executeThread.releaseToken();
+
+
         }
 
         
@@ -479,6 +527,33 @@ public class InterfaceB_EngineBasedClient extends Engine_Client implements Obser
                         "or the URL is invalid.",
                         _workItem.getIDString(), _yawlService.getURI());
             }
+        }
+
+        private Integer getPriority(){
+            if (_workItem != null) {
+                return Dispatcher.getCasePriority(_workItem.getCaseID().getTenantId());
+            }
+            else return Integer.MAX_VALUE;
+        }
+
+        private YIdentifier getCaseIdentifier(){
+            if (_workItem != null) {
+                return _workItem.getCaseID().getRootAncestor();
+            }else {
+                return _caseID.getRootAncestor();
+            }
+        }
+
+        public String getCaseId(){
+            return getCaseIdentifier().get_idString();
+        }
+
+        public Integer getTenantId(){
+            return Integer.valueOf(getCaseIdentifier().getTenantId());
+        }
+        @Override
+        public int compareTo(Object o) {
+            return this.getPriority().compareTo(((Handler) o).getPriority());
         }
     }
 

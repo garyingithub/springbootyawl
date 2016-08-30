@@ -1,5 +1,7 @@
 package edu.sysu.yawl;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -7,8 +9,15 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.boot.web.servlet.ServletRegistrationBean;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Scope;
+import org.yawlfoundation.yawl.engine.interfce.InterfaceC.AddTenantRequestThread;
+import org.yawlfoundation.yawl.engine.interfce.InterfaceC.ExecuteThread;
+import org.yawlfoundation.yawl.engine.interfce.InterfaceC.TenantPriortyManagement;
 import org.yawlfoundation.yawl.engine.interfce.interfaceA.InterfaceA_EngineBasedServer;
+import org.yawlfoundation.yawl.engine.interfce.interfaceB.Dispatcher;
+import org.yawlfoundation.yawl.engine.interfce.interfaceB.InterfaceB_EngineBasedClient;
 import org.yawlfoundation.yawl.engine.interfce.interfaceB.InterfaceB_EngineBasedServer;
+import org.yawlfoundation.yawl.engine.interfce.interfaceB.Task;
 import org.yawlfoundation.yawl.util.CharsetFilter;
 
 @SpringBootApplication
@@ -16,8 +25,22 @@ import org.yawlfoundation.yawl.util.CharsetFilter;
 public class SpringbootYawlApplication {
 
 	public static void main(String[] args) {
+		Logger logger= LoggerFactory.getLogger(SpringbootYawlApplication.class);
+		new Thread(() -> {
+            for(;;){
+              //  logger.info("running");
+                try {
+                    Task task= Dispatcher.taskQueue.take();
+                    Dispatcher.service.submit(task);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }).start();
+
 		SpringApplication.run(SpringbootYawlApplication.class, args);
 	}
+
 
 
 	@Bean
@@ -32,7 +55,9 @@ public class SpringbootYawlApplication {
 		return registration;
 	}
 
-	@Bean InterfaceB_EngineBasedServer interfaceB_engineBasedServer(){
+	@Bean
+	@Scope("prototype")
+	InterfaceB_EngineBasedServer interfaceB_engineBasedServer(){
 		return new InterfaceB_EngineBasedServer();
 	}
 	@Bean

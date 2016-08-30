@@ -127,6 +127,7 @@ public class EngineGatewayImpl implements EngineGateway {
     private String checkSession(String sessionHandle) {
         return _sessionCache.checkConnection(sessionHandle) ? SUCCESS
                                : failureMessage("Invalid or expired session.");
+        //return SUCCESS;
     }
 
 
@@ -431,6 +432,11 @@ public class EngineGatewayImpl implements EngineGateway {
         }
     }
 
+
+
+    public YWorkItem getWorkItem(String workItemId){
+        return _engine.getWorkItem(workItemId);
+    }
 
     /**
      *

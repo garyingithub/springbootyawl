@@ -1,13 +1,18 @@
 package org.yawlfoundation.yawl.engine.interfce.InterfaceC;
 
 
+import edu.sysu.yawl.Property;
 import org.jdom2.Document;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.yawlfoundation.yawl.elements.YAWLServiceReference;
 import org.yawlfoundation.yawl.elements.YTask;
 import org.yawlfoundation.yawl.elements.state.YIdentifier;
 import org.yawlfoundation.yawl.engine.*;
 import org.yawlfoundation.yawl.engine.announcement.YAnnouncement;
 import org.yawlfoundation.yawl.engine.interfce.Interface_Client;
+import org.yawlfoundation.yawl.engine.interfce.interfaceB.Dispatcher;
+import org.yawlfoundation.yawl.engine.interfce.interfaceB.InterfaceB_EngineBasedClient;
 import org.yawlfoundation.yawl.engine.interfce.interfaceB.InterfaceB_EngineBasedServer;
 
 import java.io.IOException;
@@ -22,19 +27,28 @@ import java.util.concurrent.Executors;
  * Created by gary on 16-8-11.
  */
 
-public class InterfaceC_EngineBasedClient extends Engine_Client implements ObserverGateway {
+public class InterfaceC_EngineBasedClient {
+
 
     private static final ExecutorService countingExecutor=
             Executors.newFixedThreadPool(1);
+    private Engine_Client client=new Engine_Client();
 
-    String engineId;
+    private Logger logger= LoggerFactory.getLogger(this.getClass());
+
     private InterfaceC_EngineBasedClient.MonitorClient monitorClient;
     private String influxAddress="http://222.200.180.59:8086/write?db=yawlcloud";
     public InterfaceC_EngineBasedClient(){
 
+        monitorClient=new InterfaceC_EngineBasedClient.MonitorClient();
+        monitorClient.start();
     }
     private Map<String,String> caseTenant=new HashMap<>();
 
+
+    public void addCounting(String caseId,String tenantId){
+        monitorClient.addCounting(caseId,tenantId);
+    }
 
     class MonitorClient extends Thread{
 
@@ -43,17 +57,19 @@ public class InterfaceC_EngineBasedClient extends Engine_Client implements Obser
 
         private Object mapLock=new Object();
 
-        public void addCounting(String caseId){
+        public void addCounting(String caseId,String tenantId){
 
             caseCounting.putIfAbsent(caseId,0);
             caseCounting.put(caseId,caseCounting.get(caseId)+1);
 
+            caseTenant.put(caseId,tenantId);
         }
 
 
 
 
-        private final String prefix="caseCounting,host="+engineId+",caseId=";
+
+        private final String prefix="caseCounting,host="+InterfaceB_EngineBasedServer.engineId+",caseId=";
         private void sendData(){
             synchronized (mapLock) {
                 for (Map.Entry<String, Integer> e : caseCounting.entrySet()) {
@@ -66,13 +82,14 @@ public class InterfaceC_EngineBasedClient extends Engine_Client implements Obser
                     builder.append(e.getValue());
                     countingExecutor.execute(() -> {
                         try {
-                            send(influxAddress, builder.toString());
+                            client.send(influxAddress, builder.toString());
                         } catch (IOException e1) {
                            e1.printStackTrace();
                         }
                     });
                 }
                 caseCounting.clear();
+
             }
         }
 
@@ -82,7 +99,7 @@ public class InterfaceC_EngineBasedClient extends Engine_Client implements Obser
             while (true){
                 sendData();
                 try {
-                    sleep(2000);
+                    sleep(1000);
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
@@ -99,108 +116,7 @@ public class InterfaceC_EngineBasedClient extends Engine_Client implements Obser
 
 
 
-    @Override
-    public String getScheme() {
-        return "http";
-    }
 
-    @Override
-    public void announceFiredWorkItem(YAnnouncement announcement) {
-        YWorkItem workItem=announcement.getItem();
-
-        String caseId=workItem.getCaseID().getRootAncestor().get_idString();
-        caseTenant.putIfAbsent(caseId,workItem.getCaseID().getTenantId());
-        monitorClient.addCounting(caseId);
-    }
-
-    @Override
-    public void announceCancelledWorkItem(YAnnouncement announcement) {
-
-    }
-
-    @Override
-    public void announceTimerExpiry(YAnnouncement announcement) {
-
-    }
-
-    @Override
-    public void announceCaseCompletion(YAWLServiceReference yawlService, YIdentifier caseID, Document caseData) {
-
-    }
-
-    @Override
-    public void announceCaseStarted(Set<YAWLServiceReference> services, YSpecificationID specID, YIdentifier caseID, String launchingService, boolean delayed) {
-
-    }
-
-    @Override
-    public void announceCaseCompletion(Set<YAWLServiceReference> services, YIdentifier caseID, Document caseData) {
-
-    }
-
-    @Override
-    public void announceCaseSuspended(Set<YAWLServiceReference> services, YIdentifier caseID) {
-
-    }
-
-    @Override
-    public void announceCaseSuspending(Set<YAWLServiceReference> services, YIdentifier caseID) {
-
-    }
-
-    @Override
-    public void announceCaseResumption(Set<YAWLServiceReference> services, YIdentifier caseID) {
-
-    }
-
-    @Override
-    public void announceWorkItemStatusChange(Set<YAWLServiceReference> services, YWorkItem workItem, YWorkItemStatus oldStatus, YWorkItemStatus newStatus) {
-
-        String caseId=workItem.getCaseID().getRootAncestor().get_idString();
-        caseTenant.putIfAbsent(caseId,workItem.getCaseID().getTenantId());
-        monitorClient.addCounting(caseId);
-    }
-
-    @Override
-    public void announceEngineInitialised(Set<YAWLServiceReference> services, int maxWaitSeconds) {
-
-        engineId= InterfaceB_EngineBasedServer.engineId;
-
-        if(InterfaceB_EngineBasedServer.influxAddress!=null){
-            this.influxAddress= InterfaceB_EngineBasedServer.influxAddress;
-        }
-        monitorClient=new InterfaceC_EngineBasedClient.MonitorClient();
-        monitorClient.start();
-
-    }
-
-    @Override
-    public void announceCaseCancellation(Set<YAWLServiceReference> services, YIdentifier id) {
-
-    }
-
-    @Override
-    public void announceDeadlock(Set<YAWLServiceReference> services, YIdentifier id, Set<YTask> tasks) {
-
-    }
-
-    @Override
-    public void shutdown() {
-
-    }
-
-    public static void main(String[] args){
-        Interface_Client client=new Interface_Client();
-        Map<String,String> params=new HashMap<>();
-        params.put("action","test");
-        for(int i=0;i<3;i++){
-            try {
-                client.originalExecutePost("http://localhost:8080/yawl/ib",params);
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-    }
 
 
 }

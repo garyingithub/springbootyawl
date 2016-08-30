@@ -29,7 +29,7 @@ public class Property {
     }
 
     public String getMaster_address() {
-        return master_address;
+        return master_address+"/"+getEngineid()+"/#resource";
     }
 
     public void setMaster_address(String master_address) {

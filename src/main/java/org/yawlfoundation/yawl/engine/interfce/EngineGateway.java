@@ -20,6 +20,7 @@ package org.yawlfoundation.yawl.engine.interfce;
 
 import org.yawlfoundation.yawl.engine.ObserverGateway;
 import org.yawlfoundation.yawl.engine.YSpecificationID;
+import org.yawlfoundation.yawl.engine.YWorkItem;
 import org.yawlfoundation.yawl.exceptions.YAWLException;
 
 import javax.xml.datatype.Duration;
@@ -38,6 +39,8 @@ import java.util.Date;
  * 
  */
 public interface EngineGateway extends Remote {
+
+
 
     /**
      * Indicates if the engine has encountered some form of persistence failure in its lifetime.<P>
@@ -235,4 +238,6 @@ public interface EngineGateway extends Remote {
     String isHibernateStatisticsEnabled(String sessionHandle);
 
     String getHibernateStatistics(String sessionHandle);
+
+    YWorkItem getWorkItem(String workItemID);
 }

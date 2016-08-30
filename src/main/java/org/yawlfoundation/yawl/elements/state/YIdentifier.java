@@ -59,6 +59,7 @@ public class YIdentifier {
 
     private String tenantId;
 
+
     private long _logKey = -1;                    // the FK of the logged task instance
 
 
