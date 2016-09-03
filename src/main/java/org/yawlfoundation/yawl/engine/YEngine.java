@@ -23,6 +23,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.tomcat.util.log.SystemLogHandler;
 import org.jdom2.Document;
 import org.jdom2.Element;
+import org.springframework.stereotype.Service;
 import org.yawlfoundation.yawl.authentication.YClient;
 import org.yawlfoundation.yawl.authentication.YExternalClient;
 import org.yawlfoundation.yawl.authentication.YSessionCache;
@@ -64,6 +65,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * @author Michael Adams (refactoring for v2.0-2.1)
  */
 
+@Service
 public class YEngine implements InterfaceADesign,
         InterfaceAManagement,
         InterfaceBClient,

@@ -49,6 +49,7 @@ public class Task implements Runnable,Comparable {
         String specURI = request.getParameter("specuri");
         String taskID = request.getParameter("taskID");
 
+        /*
         try {
 
             if (action != null) {
@@ -250,6 +251,8 @@ public class Task implements Runnable,Comparable {
         }
         _log.debug("InterfaceBInterfaceB_EngineBasedServer._engineBasedServer::doPost() result = {}", msg);
         return msg.toString();
+        */
+        return "";
     }
     private URI getCompletionObserver(HttpServletRequest request) {
         String completionObserver = request.getParameter("completionObserverURI");
@@ -268,10 +271,6 @@ public class Task implements Runnable,Comparable {
             String workItemID = request.getParameter("workItemID");
             if(workItemID==null){
                 priority= Integer.MAX_VALUE;
-            }else {
-                YWorkItem workItem=InterfaceB_EngineBasedServer._engine.getWorkItem(workItemID);
-
-                priority= Dispatcher.getCasePriority(workItem.getCaseID().getTenantId());
             }
         }
         return priority;

@@ -8,7 +8,7 @@
 
     <property name="connection.driver_class">org.h2.Driver</property>
 
-    <!--<property name="connection.url">jdbc:h2:/tmp/yawldb;MVCC=TRUE;AUTO_SERVER=TRUE</property>-->
+    <!--<property name="connection.url">jdbc:h2:/tmp/yawldb;MVCC=TRUE;AUTO_SERVER=TRUE</property> -->
     <property name="connection.url">jdbc:h2:/home/gary/db/yawldb;MVCC=TRUE;AUTO_SERVER=TRUE</property>
 
 

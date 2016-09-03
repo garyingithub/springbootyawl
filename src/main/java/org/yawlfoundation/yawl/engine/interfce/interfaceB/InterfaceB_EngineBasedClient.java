@@ -33,10 +33,8 @@ import org.yawlfoundation.yawl.elements.state.YIdentifier;
 import org.yawlfoundation.yawl.engine.*;
 import org.yawlfoundation.yawl.engine.announcement.YAnnouncement;
 import org.yawlfoundation.yawl.engine.announcement.YEngineEvent;
-import org.yawlfoundation.yawl.engine.interfce.InterfaceC.AddTenantRequestThread;
 import org.yawlfoundation.yawl.engine.interfce.InterfaceC.ExecuteThread;
 import org.yawlfoundation.yawl.engine.interfce.InterfaceC.InterfaceC_EngineBasedClient;
-import org.yawlfoundation.yawl.engine.interfce.Interface_Client;
 import org.yawlfoundation.yawl.unmarshal.YDecompositionParser;
 import org.yawlfoundation.yawl.util.HttpURLValidator;
 import org.yawlfoundation.yawl.util.JDOMUtil;
@@ -44,8 +42,7 @@ import org.yawlfoundation.yawl.util.JDOMUtil;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.util.*;
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.TimeUnit;
 
 import static org.yawlfoundation.yawl.engine.announcement.YEngineEvent.*;
 
@@ -62,9 +59,6 @@ import static org.yawlfoundation.yawl.engine.announcement.YEngineEvent.*;
 @Component
 public class InterfaceB_EngineBasedClient extends Engine_Client implements ObserverGateway {
 
-    @Autowired
-    private AddTenantRequestThread addTenantRequestThread=new AddTenantRequestThread();
-
 
 
     protected static final Logger _logger = LoggerFactory.getLogger(InterfaceB_EngineBasedClient.class);
@@ -72,11 +66,13 @@ public class InterfaceB_EngineBasedClient extends Engine_Client implements Obser
     private final InterfaceC_EngineBasedClient client=new InterfaceC_EngineBasedClient();
 
     @Autowired
-    private ExecuteThread executeThread=ExecuteThread.getExecuteThread();
+    private ExecuteThread executeThread=new ExecuteThread();
     public InterfaceB_EngineBasedClient(){
 
         executeThread.start();
-        addTenantRequestThread.start();
+       // Dispatcher.dispatchService.submit(addTenantRequestThread);
+       // executeThread.start();
+       // addTenantRequestThread.start();
     }
 
 
@@ -352,7 +348,8 @@ public class InterfaceB_EngineBasedClient extends Engine_Client implements Obser
      */
 
     public  void addHandle(Handler handler){
-        addTenantRequestThread.addTenantHandler(handler);
+    //    _logger.info(String.format("tenant %s is sending request",handler.getTenantId().toString()));
+        executeThread.addHandler(handler);
     }
 
     public class Handler implements Runnable,Comparable {
@@ -498,7 +495,10 @@ public class InterfaceB_EngineBasedClient extends Engine_Client implements Obser
 
 
             client.addCounting(getCaseId(),getTenantId().toString());
-            executeThread.releaseToken();
+           // executeThread.releaseToken();
+          //  _logger.info(executeThread.tokenNumber.toString());
+          //  _logger.info(String.format("tenant %s has send %d requests",getTenantId(),1));
+
 
 
         }

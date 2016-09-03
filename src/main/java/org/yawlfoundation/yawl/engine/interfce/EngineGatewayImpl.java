@@ -22,6 +22,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jdom2.Document;
 import org.jdom2.Element;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 import org.yawlfoundation.yawl.authentication.*;
 import org.yawlfoundation.yawl.elements.YAWLServiceReference;
 import org.yawlfoundation.yawl.elements.YSpecification;
@@ -59,11 +61,14 @@ import java.util.*;
  * @author Michael Adams (for v2)
  * 
  */
+@Service
 public class EngineGatewayImpl implements EngineGateway {
 
     Logger logger = LogManager.getLogger(EngineGatewayImpl.class);
 
+    @Autowired
     private YEngine _engine;
+
     private YSessionCache _sessionCache;
     private boolean enginePersistenceFailure = false;
     private static final String OPEN_FAILURE = "<failure><reason>";
