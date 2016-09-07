@@ -33,8 +33,10 @@ import org.yawlfoundation.yawl.elements.state.YIdentifier;
 import org.yawlfoundation.yawl.engine.*;
 import org.yawlfoundation.yawl.engine.announcement.YAnnouncement;
 import org.yawlfoundation.yawl.engine.announcement.YEngineEvent;
-import org.yawlfoundation.yawl.engine.interfce.InterfaceC.ExecuteThread;
-import org.yawlfoundation.yawl.engine.interfce.InterfaceC.InterfaceC_EngineBasedClient;
+import org.yawlfoundation.yawl.engine.interfce.InterfaceC.EngineMonitor;
+
+import org.yawlfoundation.yawl.engine.interfce.InterfaceC.QueueRunnable;
+import org.yawlfoundation.yawl.engine.interfce.InterfaceC.TaskRunnable;
 import org.yawlfoundation.yawl.unmarshal.YDecompositionParser;
 import org.yawlfoundation.yawl.util.HttpURLValidator;
 import org.yawlfoundation.yawl.util.JDOMUtil;
@@ -42,7 +44,8 @@ import org.yawlfoundation.yawl.util.JDOMUtil;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.util.*;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import static org.yawlfoundation.yawl.engine.announcement.YEngineEvent.*;
 
@@ -63,16 +66,12 @@ public class InterfaceB_EngineBasedClient extends Engine_Client implements Obser
 
     protected static final Logger _logger = LoggerFactory.getLogger(InterfaceB_EngineBasedClient.class);
 
-    private final InterfaceC_EngineBasedClient client=new InterfaceC_EngineBasedClient();
+    private final EngineMonitor client=EngineMonitor.getMonitor();
 
     @Autowired
-    private ExecuteThread executeThread=new ExecuteThread();
+    private QueueRunnable executeThread=new QueueRunnable(2);
     public InterfaceB_EngineBasedClient(){
-
-        executeThread.start();
-       // Dispatcher.dispatchService.submit(addTenantRequestThread);
-       // executeThread.start();
-       // addTenantRequestThread.start();
+        new Thread(executeThread).start();
     }
 
 
@@ -95,6 +94,7 @@ public class InterfaceB_EngineBasedClient extends Engine_Client implements Obser
 
         this.addHandle(new Handler(announcement.getYawlService(),
                       announcement.getItem(), ITEM_ADD));
+
 
 
 
@@ -227,7 +227,7 @@ public class InterfaceB_EngineBasedClient extends Engine_Client implements Obser
        // _executor.execute(
          //                     new Handler(getReference(), specID, caseID, launchingService, delayed, CASE_START));
 
-        addHandle( new Handler(getReference(), specID, caseID, launchingService, delayed, CASE_START));
+            addHandle( new Handler(getReference(), specID, caseID, launchingService, delayed, CASE_START));
     }
 
     /**
@@ -347,12 +347,15 @@ public class InterfaceB_EngineBasedClient extends Engine_Client implements Obser
      * parameter values as HTTP POST messages to external custom services
      */
 
+    private ExecutorService executorService= Executors.newFixedThreadPool(2);
     public  void addHandle(Handler handler){
     //    _logger.info(String.format("tenant %s is sending request",handler.getTenantId().toString()));
-        executeThread.addHandler(handler);
+        //executeThread.addHandler(handler);
+        handler.setStartTime(System.currentTimeMillis());
+        executorService.execute(handler);
     }
 
-    public class Handler implements Runnable,Comparable {
+    public class Handler implements TaskRunnable {
         private YWorkItem _workItem;
         private YAWLServiceReference _yawlService;
         private YEngineEvent _command;
@@ -366,6 +369,11 @@ public class InterfaceB_EngineBasedClient extends Engine_Client implements Obser
         private boolean _delayed;
         private int _pingTimeout = 5;
 
+        private long startTime;
+        public Handler setStartTime(long startTime){
+            this.startTime=startTime;
+            return this;
+        }
 
 
 
@@ -494,7 +502,7 @@ public class InterfaceB_EngineBasedClient extends Engine_Client implements Obser
             }
 
 
-            client.addCounting(getCaseId(),getTenantId().toString());
+            client.addCounting(getCaseId(),System.currentTimeMillis()-startTime);
            // executeThread.releaseToken();
           //  _logger.info(executeThread.tokenNumber.toString());
           //  _logger.info(String.format("tenant %s has send %d requests",getTenantId(),1));
@@ -529,12 +537,6 @@ public class InterfaceB_EngineBasedClient extends Engine_Client implements Obser
             }
         }
 
-        private Integer getPriority(){
-            if (_workItem != null) {
-                return Dispatcher.getCasePriority(_workItem.getCaseID().getTenantId());
-            }
-            else return Integer.MAX_VALUE;
-        }
 
         private YIdentifier getCaseIdentifier(){
             if (_workItem != null) {
@@ -548,13 +550,15 @@ public class InterfaceB_EngineBasedClient extends Engine_Client implements Obser
             return getCaseIdentifier().get_idString();
         }
 
-        public Integer getTenantId(){
-            return Integer.valueOf(getCaseIdentifier().getTenantId());
+        public String getTenantId(){
+            return getCaseIdentifier().getTenantId();
         }
+
         @Override
-        public int compareTo(Object o) {
-            return this.getPriority().compareTo(((Handler) o).getPriority());
+        public Integer getConsume() {
+            return 2;
         }
+
     }
 
 

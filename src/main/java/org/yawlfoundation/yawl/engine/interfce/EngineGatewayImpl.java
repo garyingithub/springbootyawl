@@ -1466,6 +1466,9 @@ public class EngineGatewayImpl implements EngineGateway {
     }
 
 
+    public String getCaseIdByWorkItemId(String workItemId){
+        return _engine.getWorkItem(workItemId).getCaseID().getRootAncestor().get_idString();
+    }
     public String cancelWorkItem(String workItemID, String data, String fail, String sessionHandle)
                                                                  throws RemoteException {
         String sessionMessage = checkSession(sessionHandle);

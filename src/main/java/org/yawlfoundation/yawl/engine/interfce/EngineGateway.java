@@ -40,6 +40,7 @@ import java.util.Date;
  */
 public interface EngineGateway extends Remote {
 
+    public String getCaseIdByWorkItemId(String workItemId);
 
 
     /**

@@ -25,11 +25,11 @@ import org.yawlfoundation.yawl.elements.data.external.ExternalDBGatewayFactory;
 import org.yawlfoundation.yawl.elements.predicate.PredicateEvaluatorFactory;
 import org.yawlfoundation.yawl.engine.ObserverGateway;
 import org.yawlfoundation.yawl.engine.YSpecificationID;
-import org.yawlfoundation.yawl.engine.interfce.EngineGateway;
-import org.yawlfoundation.yawl.engine.interfce.EngineGatewayImpl;
+import org.yawlfoundation.yawl.engine.interfce.*;
+import org.yawlfoundation.yawl.engine.interfce.InterfaceC.CaseTenantMap;
+import org.yawlfoundation.yawl.engine.interfce.InterfaceC.EngineMonitor;
+import org.yawlfoundation.yawl.engine.interfce.InterfaceC.QueueRunnable;
 import org.yawlfoundation.yawl.engine.interfce.InterfaceC.TenantPriortyManagement;
-import org.yawlfoundation.yawl.engine.interfce.ServletUtils;
-import org.yawlfoundation.yawl.engine.interfce.YHttpServlet;
 import org.yawlfoundation.yawl.exceptions.YAWLException;
 import org.yawlfoundation.yawl.exceptions.YPersistenceException;
 import org.yawlfoundation.yawl.util.StringUtil;
@@ -71,8 +71,12 @@ public class InterfaceB_EngineBasedServer extends YHttpServlet {
     public static String engineId;
     public static String influxAddress;
 
+    private EngineMonitor monitor=EngineMonitor.getMonitor();
+
     @Autowired
     private Property property;
+
+    private QueueRunnable dispatchRunnable=new QueueRunnable(2);
 
     @Override
     public void init(ServletConfig config) throws ServletException {
@@ -152,6 +156,8 @@ public class InterfaceB_EngineBasedServer extends YHttpServlet {
                     "consult the logs for details");
             throw new UnavailableException("Unspecified engine failure");
         }
+
+        new Thread(dispatchRunnable).start();
     }
 
 
@@ -212,10 +218,41 @@ public class InterfaceB_EngineBasedServer extends YHttpServlet {
 
     public void doPost(HttpServletRequest request, HttpServletResponse response) throws IOException {
 
+        String workItemID = request.getParameter("workItemID");
+        String caseID=request.getParameter("caseID");
+        if(workItemID!=null){
+            caseID=_engine.getCaseIdByWorkItemId(workItemID);
+        }
+
+        String tenantID=request.getParameter("tenantID");
+        if(tenantID==null){
+            tenantID=CaseTenantMap.getTenantId(caseID);
+        }
+
+
+     //   Long start= System.currentTimeMillis();
         OutputStreamWriter outputWriter = ServletUtils.prepareResponse(response);
         StringBuilder output = new StringBuilder();
         output.append("<response>");
-        output.append(processPostQuery(request));
+        if(workItemID==null){
+            output.append(processPostQuery(request));
+        }else {
+            Task task=new Task(caseID,tenantID,request,_engine);
+            if(request.getParameter("action").equals("checkin")){
+                task.setConsume(2);
+            }else {
+                task.setConsume(1);
+            }
+            synchronized (task){
+                dispatchRunnable.addHandler(task);
+                try {
+                    task.wait();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+            output.append(task.getResult());
+        }
 
         output.append("</response>");
         if (_engine.enginePersistenceFailure())
@@ -231,6 +268,10 @@ public class InterfaceB_EngineBasedServer extends YHttpServlet {
         outputWriter.write(output.toString());
         outputWriter.flush();
         outputWriter.close();
+       // Long end= (System.currentTimeMillis());
+
+        if(workItemID!=null)
+            monitor.addResponseTime(caseID, 0);
         //todo find out how to provide a meaningful 500 message in the format of  a fault message.
     }
 
@@ -238,6 +279,7 @@ public class InterfaceB_EngineBasedServer extends YHttpServlet {
     //###############################################################################
     //      Start YAWL Processing methods
     //###############################################################################
+
 
     private String processPostQuery(HttpServletRequest request) {
         StringBuilder msg = new StringBuilder();
@@ -248,6 +290,13 @@ public class InterfaceB_EngineBasedServer extends YHttpServlet {
         String specVersion = request.getParameter("specversion");
         String specURI = request.getParameter("specuri");
         String taskID = request.getParameter("taskID");
+        String caseID=request.getParameter("caseID");
+        String tenantID=request.getParameter("tenantID");
+        String priorityString=request.getParameter("priority");
+
+
+
+
 
         try {
             debug(request, "Post");
@@ -286,9 +335,9 @@ public class InterfaceB_EngineBasedServer extends YHttpServlet {
                     String mSecStr = request.getParameter("mSec");
                     String startStr = request.getParameter("start");
                     String waitStr = request.getParameter("wait");
-                    String caseID=request.getParameter("caseID");
-                    String tenantID=request.getParameter("tenantID");
-                    String priorityString=request.getParameter("priority");
+
+
+                    CaseTenantMap.addCase(caseID,tenantID);
 
                     TenantPriortyManagement.addTenant(tenantID,Integer.valueOf(priorityString));
                     if (mSecStr != null) {
@@ -311,7 +360,6 @@ public class InterfaceB_EngineBasedServer extends YHttpServlet {
                                 completionObserver, caseID,tenantID,logDataStr, sessionHandle));
                 }
                 else if (action.equals("cancelCase")) {
-                    String caseID = request.getParameter("caseID");
                     msg.append(_engine.cancelCase(caseID, sessionHandle));
                 }
                 else if (action.equals("getWorkItem")) {
@@ -382,19 +430,15 @@ public class InterfaceB_EngineBasedServer extends YHttpServlet {
                     msg.append(_engine.getCasesForSpecification(specID, sessionHandle));
                 }
                 else if (action.equals("getSpecificationForCase")) {
-                    String caseID = request.getParameter("caseID");
                     msg.append(_engine.getSpecificationForCase(caseID, sessionHandle));
                 }
                 else if (action.equals("getSpecificationIDForCase")) {
-                    String caseID = request.getParameter("caseID");
                     msg.append(_engine.getSpecificationIDForCase(caseID, sessionHandle));
                 }
                 else if (action.equals("getCaseState")) {
-                    String caseID = request.getParameter("caseID");
                     msg.append(_engine.getCaseState(caseID, sessionHandle));
                 }
                 else if (action.equals("getCaseData")) {
-                    String caseID = request.getParameter("caseID");
                     msg.append(_engine.getCaseData(caseID, sessionHandle));
                 }
                 else if (action.equals("getChildren")) {
@@ -407,11 +451,9 @@ public class InterfaceB_EngineBasedServer extends YHttpServlet {
                     msg.append(_engine.getCaseInstanceSummary(sessionHandle));
                 }
                 else if (action.equals("getWorkItemInstanceSummary")) {
-                    String caseID = request.getParameter("caseID");
                     msg.append(_engine.getWorkItemInstanceSummary(caseID, sessionHandle));
                 }
                 else if (action.equals("getParameterInstanceSummary")) {
-                    String caseID = request.getParameter("caseID");
                     msg.append(_engine.getParameterInstanceSummary(caseID, workItemID, sessionHandle));
                 }
                 else if (action.equals("createInstance")) {
