@@ -69,7 +69,7 @@ public class InterfaceB_EngineBasedClient extends Engine_Client implements Obser
     private final EngineMonitor client=EngineMonitor.getMonitor();
 
     @Autowired
-    private QueueRunnable executeThread=new QueueRunnable(2);
+    private QueueRunnable executeThread=new QueueRunnable(2,false,10);
     public InterfaceB_EngineBasedClient(){
         new Thread(executeThread).start();
     }
@@ -350,9 +350,10 @@ public class InterfaceB_EngineBasedClient extends Engine_Client implements Obser
     private ExecutorService executorService= Executors.newFixedThreadPool(2);
     public  void addHandle(Handler handler){
     //    _logger.info(String.format("tenant %s is sending request",handler.getTenantId().toString()));
-        //executeThread.addHandler(handler);
         handler.setStartTime(System.currentTimeMillis());
-        executorService.execute(handler);
+        executeThread.addHandler(handler);
+
+        //executorService.execute(handler);
     }
 
     public class Handler implements TaskRunnable {

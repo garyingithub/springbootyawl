@@ -76,7 +76,7 @@ public class InterfaceB_EngineBasedServer extends YHttpServlet {
     @Autowired
     private Property property;
 
-    private QueueRunnable dispatchRunnable=new QueueRunnable(2);
+    private QueueRunnable dispatchRunnable=new QueueRunnable(2,true,600);
 
     @Override
     public void init(ServletConfig config) throws ServletException {
@@ -230,7 +230,7 @@ public class InterfaceB_EngineBasedServer extends YHttpServlet {
         }
 
 
-     //   Long start= System.currentTimeMillis();
+        Long start= System.currentTimeMillis();
         OutputStreamWriter outputWriter = ServletUtils.prepareResponse(response);
         StringBuilder output = new StringBuilder();
         output.append("<response>");
@@ -268,10 +268,10 @@ public class InterfaceB_EngineBasedServer extends YHttpServlet {
         outputWriter.write(output.toString());
         outputWriter.flush();
         outputWriter.close();
-       // Long end= (System.currentTimeMillis());
+        Long end= (System.currentTimeMillis());
 
         if(workItemID!=null)
-            monitor.addResponseTime(caseID, 0);
+            monitor.addResponseTime(caseID,Math.toIntExact(end-start));
         //todo find out how to provide a meaningful 500 message in the format of  a fault message.
     }
 

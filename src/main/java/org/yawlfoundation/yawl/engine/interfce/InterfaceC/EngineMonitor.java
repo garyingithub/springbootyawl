@@ -38,9 +38,9 @@ public class EngineMonitor {
         @Override
         public Integer getNewRecord(Integer oldValue, Integer curValue) {
             if(oldValue==null){
-                oldValue=new Integer(0);
+                oldValue=curValue;
             }
-            return oldValue+1;
+            return (oldValue+curValue)/2;
         }
     };
 
@@ -48,9 +48,9 @@ public class EngineMonitor {
         @Override
         public Integer getNewRecord(Integer oldValue, Integer curValue) {
             if(oldValue==null){
-                oldValue=new Integer(0);
+                oldValue=curValue;
             }
-            return oldValue+1;
+            return (oldValue+curValue)/2;
         }
     };
 
